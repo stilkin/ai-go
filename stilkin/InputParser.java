@@ -12,7 +12,8 @@ public class InputParser {
     public static final String LINETYPE_SETTINGS = "settings";
     public static final String LINETYPE_UPDATE = "update";
     public static final String LINETYPE_ACTION = "action";
-    private final List<IParseEventListener> observerList = new ArrayList<IParseEventListener>();
+    private final List<IParserUpdateListener> updateObservers = new ArrayList<IParserUpdateListener>();
+    private final List<IActionRequestListener> actionObservers = new ArrayList<IActionRequestListener>();
 
     public void parse(final String input) {
 	final String[] words = input.split(" ");
@@ -35,9 +36,9 @@ public class InputParser {
 	    }
 
 	    // notify all observers
-	    IParseEventListener observer;
-	    for (int b = 0; b < observerList.size(); b++) {
-		observer = observerList.get(b);
+	    IActionRequestListener observer;
+	    for (int b = 0; b < actionObservers.size(); b++) {
+		observer = actionObservers.get(b);
 		observer.OnActionRequested(action, time);
 	    }
 
@@ -49,9 +50,9 @@ public class InputParser {
 	    value = value.replace(setting, "").trim();
 
 	    // notify all observers
-	    IParseEventListener observer;
-	    for (int b = 0; b < observerList.size(); b++) {
-		observer = observerList.get(b);
+	    IParserUpdateListener observer;
+	    for (int b = 0; b < updateObservers.size(); b++) {
+		observer = updateObservers.get(b);
 		observer.OnSettingUpdated(setting, value);
 	    }
 
@@ -63,9 +64,9 @@ public class InputParser {
 	    value = value.replace(update, "").trim();
 
 	    // notify all observers
-	    IParseEventListener observer;
-	    for (int b = 0; b < observerList.size(); b++) {
-		observer = observerList.get(b);
+	    IParserUpdateListener observer;
+	    for (int b = 0; b < updateObservers.size(); b++) {
+		observer = updateObservers.get(b);
 		observer.OnGameStateUpdated(update, value);
 	    }
 
@@ -76,21 +77,35 @@ public class InputParser {
     }
 
     /**
-     * Implement this interface and register your observer if you want to be notified of an action requests, game state updates, or setting updates.
+     * Implement this interface and register your observer if you want to be notified of game state updates or setting updates.
      */
-    public interface IParseEventListener {
-	void OnActionRequested(final String type, final long time);
-
+    public interface IParserUpdateListener {
 	void OnSettingUpdated(final String setting, final String value);
 
 	void OnGameStateUpdated(final String update, final String value);
     }
+    
+    /**
+     * Implement this interface and register your observer if you want to be notified of an action request.
+     */
+    public interface IActionRequestListener {
+	void OnActionRequested(final String type, final long time);
+    }
+    
 
-    public boolean addActionRequestListener(final IParseEventListener observer) {
-	return observerList.add(observer);
+    public boolean addParserUpdateListener(final IParserUpdateListener observer) {
+	return updateObservers.add(observer);
     }
 
-    public boolean removeActionRequestListener(final IParseEventListener observer) {
-	return observerList.remove(observer);
+    public boolean removeParserUpdateListener(final IParserUpdateListener observer) {
+	return updateObservers.remove(observer);
+    }
+    
+    public boolean addActionRequestListener(final IActionRequestListener observer) {
+	return actionObservers.add(observer);
+    }
+
+    public boolean removeActionRequestListener(final IActionRequestListener observer) {
+	return actionObservers.remove(observer);
     }
 }

@@ -11,12 +11,14 @@ import java.util.Scanner;
 public class Starter {
 
     public static void main(String[] args) {
-	final GoBot bot = new GoBot();
 	final InputParser inputParser = new InputParser();
 
-	// enable the bot to be notified of parser events
-	inputParser.addActionRequestListener(bot);
+	final GoParser goParser = new GoParser();
+	inputParser.addParserUpdateListener(goParser);
 
+	final GoBot goBot = new GoBot(goParser);
+	inputParser.addActionRequestListener(goBot);
+	
 	final Scanner scan = new Scanner(System.in);
 	while (scan.hasNextLine()) {
 	    final String line = scan.nextLine();
