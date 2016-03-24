@@ -32,6 +32,10 @@ public class GoField {
 
 	return moveList;
     }
+    
+    public int[][] getCells(){
+	return cells;
+    }
 
     public boolean isEmptyCell(final int x, final int y) {
 	return (cells[x][y] == 0);

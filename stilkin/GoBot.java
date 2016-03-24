@@ -9,9 +9,14 @@ import java.util.Random;
  *
  */
 public class GoBot implements InputParser.IActionRequestListener {
-    public static final int MAX_DIM = 19;
+    private static final long MAX_TIME_MS = 200;
+    private static final float COHESION_VALUE = 1;
+    private static final float SURROUND_VALUE = 100;
     private GoParser goParser;
     private GoField goField;
+    private int myId = 0;
+    private int enemyId = 0;
+    private long roundStart = 0;
 
     public GoBot(final GoParser goParser) {
 	if (goParser == null) {
@@ -27,6 +32,7 @@ public class GoBot implements InputParser.IActionRequestListener {
 
     @Override
     public void OnActionRequested(final String type, final long time) {
+	roundStart = System.currentTimeMillis();
 	System.err.println("OnActionRequested Round" + goParser.getUpdate(GoConsts.Updates.ROUND_NR));
 
 	if (goField == null) { // lazy loader
@@ -36,20 +42,172 @@ public class GoBot implements InputParser.IActionRequestListener {
 	    goField.changeSize(yMax, xMax);
 	}
 
+	if (myId == 0) {
+	    myId = goParser.getSettingAsInt(GoConsts.Settings.YOUR_BOTID);
+	    enemyId = 3 - myId; // TOOD: check
+	    System.err.println("I am number " + myId);
+	}
+
 	final String fieldStr = goParser.getUpdate(GoConsts.Updates.GAME_FIELD);
 	goField.parseFromString(fieldStr);
+	calculateMoves(goField);
 
 	// get random, semi-valid move
-	final List<GoCoord> moves = goField.getSortedMoveList();
-	System.err.println("Moves: " + moves.size());
-	if (moves.size() > 0) {
-	    final Random rnd = new Random();
-	    final GoCoord move = moves.get(rnd.nextInt(moves.size()));
-	    System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, move.getX(), move.getY());
-	    System.out.flush();
-	} else {
-	    System.out.println(GoConsts.Actions.PASS_ACTION);
-	    System.out.flush();
-	}
+	// final List<GoCoord> moves = goField.getSortedMoveList();
+	// System.err.println("Moves: " + moves.size());
+	// if (moves.size() > 0) {
+	// final Random rnd = new Random();
+	// final GoCoord move = moves.get(rnd.nextInt(moves.size()));
+	// System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, move.getX(), move.getY());
+	// System.out.flush();
+	// } else {
+	// System.out.println(GoConsts.Actions.PASS_ACTION);
+	// System.out.flush();
+	// }
+
+	System.err.printf("Round took %d ms\n", (System.currentTimeMillis() - roundStart));
     }
+
+    private void calculateMoves(final GoField goField) {
+	final int[][] cells = goField.getCells();
+	final int colMax = cells[0].length;
+	float[][] map = new float[colMax][cells.length];
+
+	for (int x = 0; x < colMax; x++) {
+	    for (int y = 0; y < cells.length; y++) {
+		if (cells[x][y] == myId) {
+		    map[x][y] = COHESION_VALUE;
+		}
+		if (cells[x][y] == enemyId) {
+		    map[x][y] = SURROUND_VALUE;
+		}
+	    }
+	}
+
+//	System.err.println(mapToString(map));
+	map = diffuse(map);
+	
+	float max = 0;
+	int xm = 0, ym = 0;
+	for (int x = 0; x < colMax; x++) {
+	    for (int y = 0; y < cells.length; y++) {
+		if (cells[x][y] == myId || cells[x][y] == enemyId) {
+		    map[x][y] = 0; // position in use
+		} else if(map[x][y] > max) {
+		    max = map[x][y];
+		    xm = x;
+		    ym = y;
+		}
+	    }
+	}
+//	System.err.println(mapToString(map));
+	
+	// temporary -> output max move to see if this works
+	System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, xm, ym);
+	System.out.flush();
+
+	// TODO: get sorted list of moves
+    }
+
+
+
+    private float[][] diffuse(float[][] map) {
+	long elapsed = 0;
+	final int colMax = map[0].length;
+	final int rowMax = map.length;
+	float[][] newMap = new float[colMax][rowMax];
+	float[][] tmp;
+	int cnt = 40;
+	boolean hasEmpty = true;
+	do {
+	    hasEmpty = false;
+	    for (int x = 0; x < colMax; x++) {
+		for (int y = 0; y < rowMax; y++) {
+		    newMap[x][y] = averageAround(map, x, y);
+		    if (newMap[x][y] == 0) {
+			hasEmpty = true;
+		    }
+		}
+	    }
+
+	    // swap
+	    tmp = map;
+	    map = newMap;
+	    newMap = tmp;
+	   // System.err.println(mapToString(map));
+	    elapsed = System.currentTimeMillis() - roundStart;
+	    cnt--;
+	} while(false);  // (hasEmpty && elapsed < MAX_TIME_MS);
+	// TODO: set minimal / maximal amount of diffusion?
+
+	// System.err.println((40 - cnt) + " iterations");
+
+	return map;
+    }
+
+    private float averageAround(final float[][] map, final int x, final int y) {
+	float total = 0;
+	int count = 0;
+	int x1, y1;
+
+	for (int ox = -1; ox <= 1; ox++) {
+	    for (int oy = -1; oy <= 1; oy++) {
+		x1 = x + ox;
+		y1 = y + oy;
+		if (x1 == x || y1 == y) {
+		    if (isWithinBounds(map, x1, y1)) {
+			count++;
+			total += map[x1][y1];
+		    }
+		}
+	    }
+	}
+	return (total / 8);
+    }
+
+    private boolean isWithinBounds(final float[][] map, final int x, final int y) {
+	final int colMax = map[0].length;
+	final int rowMax = map.length;
+
+	boolean xWithin = false;
+	boolean yWithin = false;
+
+	if (x >= 0 && x < colMax) {
+	    xWithin = true;
+	}
+
+	if (y >= 0 && y < rowMax) {
+	    yWithin = true;
+	}
+
+	return xWithin && yWithin;
+    }
+    
+    private String mapToString(final float[][] map) {
+	final int colMax = map[0].length;
+	final int rowMax = map.length;
+	float max = 0;
+	for (int x = 0; x < colMax; x++) {
+	    for (int y = 0; y < rowMax; y++) {
+		if (map[x][y] > max) {
+		    max = map[x][y];
+		}
+	    }
+	}
+
+	final StringBuilder strB = new StringBuilder();
+	for (int x = 0; x < colMax; x++) {
+	    for (int y = 0; y < rowMax; y++) {
+		final float pct = map[x][y] / max;
+		if (pct != 0) {
+		    strB.append(String.format("%02d ", (int) (99 * pct))); // scale to 100
+		} else {
+		    strB.append("   ");
+		}
+	    }
+	    strB.append(" | \n");
+	}
+	return strB.toString();
+    }
+
 }
