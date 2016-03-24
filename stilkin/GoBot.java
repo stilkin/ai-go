@@ -1,5 +1,6 @@
 package stilkin;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -53,22 +54,23 @@ public class GoBot implements InputParser.IActionRequestListener {
 	calculateMoves(goField);
 
 	// get random, semi-valid move
-	// final List<GoCoord> moves = goField.getSortedMoveList();
-	// System.err.println("Moves: " + moves.size());
-	// if (moves.size() > 0) {
-	// final Random rnd = new Random();
-	// final GoCoord move = moves.get(rnd.nextInt(moves.size()));
-	// System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, move.getX(), move.getY());
-	// System.out.flush();
-	// } else {
-	// System.out.println(GoConsts.Actions.PASS_ACTION);
-	// System.out.flush();
-	// }
+	 final List<GoCoord> moves = calculateMoves(goField);
+	System.err.println("Moves: " + moves.size());
+	if (moves.size() > 0) {
+	    final Random rnd = new Random();
+	    final GoCoord move = moves.get(rnd.nextInt(moves.size()));
+	    System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, move.getX(), move.getY());
+	    System.out.flush();
+	} else {
+	    System.out.println(GoConsts.Actions.PASS_ACTION);
+	    System.out.flush();
+	}
 
 	System.err.printf("Round took %d ms\n", (System.currentTimeMillis() - roundStart));
     }
 
-    private void calculateMoves(final GoField goField) {
+    private List<GoCoord> calculateMoves(final GoField goField) {
+	final List<GoCoord> moveList = new ArrayList<GoCoord>();
 	final int[][] cells = goField.getCells();
 	final int colMax = cells[0].length;
 	float[][] map = new float[colMax][cells.length];
@@ -84,29 +86,31 @@ public class GoBot implements InputParser.IActionRequestListener {
 	    }
 	}
 
-//	System.err.println(mapToString(map));
 	map = diffuse(map);
 	
 	float max = 0;
-	int xm = 0, ym = 0;
 	for (int x = 0; x < colMax; x++) {
 	    for (int y = 0; y < cells.length; y++) {
 		if (cells[x][y] == myId || cells[x][y] == enemyId) {
 		    map[x][y] = 0; // position in use
 		} else if(map[x][y] > max) {
 		    max = map[x][y];
-		    xm = x;
-		    ym = y;
 		}
 	    }
 	}
-//	System.err.println(mapToString(map));
+	// System.err.println(mapToString(map));
 	
-	// temporary -> output max move to see if this works
-	System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, xm, ym);
-	System.out.flush();
-
-	// TODO: get sorted list of moves
+	// put the best moves in a list
+	for (int x = 0; x < colMax; x++) {
+	    for (int y = 0; y < cells.length; y++) {
+		if(map[x][y] == max) {
+		    moveList.add(new GoCoord(x,y));
+		}
+	    }
+	}
+	
+	// TODO: get sorted list of moves instead?
+	return moveList;
     }
 
 
@@ -139,8 +143,6 @@ public class GoBot implements InputParser.IActionRequestListener {
 	    cnt--;
 	} while(false);  // (hasEmpty && elapsed < MAX_TIME_MS);
 	// TODO: set minimal / maximal amount of diffusion?
-
-	// System.err.println((40 - cnt) + " iterations");
 
 	return map;
     }

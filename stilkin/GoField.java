@@ -24,7 +24,7 @@ public class GoField {
 
 	for (int y = 0; y < MAX_HEIGHT; y++) {
 	    for (int x = 0; x < MAX_WIDTH; x++) {
-		if (isEmptyCell(x, y)) {
+		if (!isEmptyCell(x, y)) {
 		    moveList.add(new GoCoord(x, y));
 		}
 	    }
