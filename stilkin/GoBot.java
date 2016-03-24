@@ -3,13 +3,15 @@ package stilkin;
 import java.util.List;
 import java.util.Random;
 
-import field.Field;
-import move.Move;
-
+/**
+ * 
+ * @author stilkin
+ *
+ */
 public class GoBot implements InputParser.IActionRequestListener {
     public static final int MAX_DIM = 19;
     private GoParser goParser;
-    private Field gameField = new Field();
+    private GoField goField;
 
     public GoBot(final GoParser goParser) {
 	if (goParser == null) {
@@ -27,25 +29,22 @@ public class GoBot implements InputParser.IActionRequestListener {
     public void OnActionRequested(final String type, final long time) {
 	System.err.println("OnActionRequested Round" + goParser.getUpdate(GoConsts.Updates.ROUND_NR));
 
-	// init field
-	final int xMax = goParser.getSettingAsInt(GoConsts.Settings.FIELD_HEIGHT);
-	gameField.setColumns(xMax);
-	final int yMax = goParser.getSettingAsInt(GoConsts.Settings.FIELD_WIDTH);
-	gameField.setRows(yMax);
-	try {
-	    gameField.initField();
-	} catch (Exception e) {
-	    e.printStackTrace();
+	if (goField == null) { // lazy loader
+	    goField = new GoField();
+	    final int xMax = goParser.getSettingAsInt(GoConsts.Settings.FIELD_HEIGHT);
+	    final int yMax = goParser.getSettingAsInt(GoConsts.Settings.FIELD_WIDTH);
+	    goField.changeSize(yMax, xMax);
 	}
+
 	final String fieldStr = goParser.getUpdate(GoConsts.Updates.GAME_FIELD);
-	gameField.parseFromString(fieldStr);
+	goField.parseFromString(fieldStr);
 
 	// get random, semi-valid move
-	final List<Move> moves = gameField.getAvailableMoves();
+	final List<GoCoord> moves = goField.getSortedMoveList();
 	System.err.println("Moves: " + moves.size());
 	if (moves.size() > 0) {
 	    final Random rnd = new Random();
-	    final Move move = moves.get(rnd.nextInt(moves.size()));
+	    final GoCoord move = moves.get(rnd.nextInt(moves.size()));
 	    System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, move.getX(), move.getY());
 	    System.out.flush();
 	} else {
