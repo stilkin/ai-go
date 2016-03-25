@@ -10,9 +10,6 @@ import java.util.Random;
  *
  */
 public class GoBot implements InputParser.IActionRequestListener {
-    private static final long MAX_TIME_MS = 200;
-    private static final float COHESION_VALUE = 1;
-    private static final float SURROUND_VALUE = 100;
     private GoParser goParser;
     private GoField goField;
     private int myId = 0;
@@ -46,145 +43,64 @@ public class GoBot implements InputParser.IActionRequestListener {
 	if (myId == 0) {
 	    myId = goParser.getSettingAsInt(GoConsts.Settings.YOUR_BOTID);
 	    enemyId = 3 - myId; // TOOD: check
-	    System.err.println("I am number " + myId);
+	    System.err.println("I am player " + myId);
 	}
 
 	final String fieldStr = goParser.getUpdate(GoConsts.Updates.GAME_FIELD);
 	goField.parseFromString(fieldStr);
-	calculateMoves(goField);
+	System.err.println(goField.toPrettyString());
 
-	// get random, semi-valid move
-	 final List<GoCoord> moves = calculateMoves(goField);
-	System.err.println("Moves: " + moves.size());
-	if (moves.size() > 0) {
+	// TODO: implement KO rule
+	// get a list of all empty fields with liberties (= valid moves)
+	final List<GoCoord> validMoves = new ArrayList<GoCoord>();
+	validMoves.addAll(goField.getCoordsWithLiberties(0, 4));
+	validMoves.addAll(goField.getCoordsWithLiberties(0, 3));
+	validMoves.addAll(goField.getCoordsWithLiberties(0, 2));
+	validMoves.addAll(goField.getCoordsWithLiberties(0, 1));
+	// System.err.println("validMoves: " + validMoves.size());
+
+	List<GoCoord> enemyStones, nearbyMoves;
+	for (int l = 1; l <= 4; l++) {
+	    // get a list of enemy stones with limited liberties
+	    enemyStones = goField.getCoordsWithLiberties(enemyId, l);
+	    // System.err.println("Found " + enemyStones.size() + " enemy stones with " + l + " liberties");
+	    for (GoCoord eStone : enemyStones) {
+		// get the empty fields around it
+		nearbyMoves = goField.getAdjacendCoords(eStone.x, eStone.y, 0);
+		for (GoCoord move : nearbyMoves) {
+		    // check move for validity
+		    if (validMoves.contains(move)) {
+			printMove(move); // make a move
+			return; // stop here
+		    }
+		}
+	    }
+	}
+
+	// if we arrive here, there were no enemy stones (with liberties) we could move on
+	GoCoord move = null;
+	if (validMoves.size() > 0) {
 	    final Random rnd = new Random();
-	    final GoCoord move = moves.get(rnd.nextInt(moves.size()));
-	    System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, move.getX(), move.getY());
-	    System.out.flush();
+	    move = validMoves.get(rnd.nextInt(validMoves.size()));
+	}
+	printMove(move);
+    }
+
+    private void printMove(final GoCoord move) {
+	if (move != null) {
+	    printMove(move.x, move.y);
 	} else {
 	    System.out.println(GoConsts.Actions.PASS_ACTION);
 	    System.out.flush();
 	}
-
 	System.err.printf("Round took %d ms\n", (System.currentTimeMillis() - roundStart));
     }
 
-    private List<GoCoord> calculateMoves(final GoField goField) {
-	final List<GoCoord> moveList = new ArrayList<GoCoord>();
-	final int[][] cells = goField.getCells();
-	final int colMax = cells[0].length;
-	float[][] map = new float[colMax][cells.length];
-
-	for (int x = 0; x < colMax; x++) {
-	    for (int y = 0; y < cells.length; y++) {
-		if (cells[x][y] == myId) {
-		    map[x][y] = COHESION_VALUE;
-		}
-		if (cells[x][y] == enemyId) {
-		    map[x][y] = SURROUND_VALUE;
-		}
-	    }
-	}
-
-	map = diffuse(map);
-	
-	float max = 0;
-	for (int x = 0; x < colMax; x++) {
-	    for (int y = 0; y < cells.length; y++) {
-		if (cells[x][y] == myId || cells[x][y] == enemyId) {
-		    map[x][y] = 0; // position in use
-		} else if(map[x][y] > max) {
-		    max = map[x][y];
-		}
-	    }
-	}
-	// System.err.println(mapToString(map));
-	
-	// put the best moves in a list
-	for (int x = 0; x < colMax; x++) {
-	    for (int y = 0; y < cells.length; y++) {
-		if(map[x][y] == max) {
-		    moveList.add(new GoCoord(x,y));
-		}
-	    }
-	}
-	
-	// TODO: get sorted list of moves instead?
-	return moveList;
+    private void printMove(final int x, final int y) {
+	System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, x, y);
+	System.out.flush();
     }
 
-
-
-    private float[][] diffuse(float[][] map) {
-	long elapsed = 0;
-	final int colMax = map[0].length;
-	final int rowMax = map.length;
-	float[][] newMap = new float[colMax][rowMax];
-	float[][] tmp;
-	int cnt = 40;
-	boolean hasEmpty = true;
-	do {
-	    hasEmpty = false;
-	    for (int x = 0; x < colMax; x++) {
-		for (int y = 0; y < rowMax; y++) {
-		    newMap[x][y] = averageAround(map, x, y);
-		    if (newMap[x][y] == 0) {
-			hasEmpty = true;
-		    }
-		}
-	    }
-
-	    // swap
-	    tmp = map;
-	    map = newMap;
-	    newMap = tmp;
-	   // System.err.println(mapToString(map));
-	    elapsed = System.currentTimeMillis() - roundStart;
-	    cnt--;
-	} while(false);  // (hasEmpty && elapsed < MAX_TIME_MS);
-	// TODO: set minimal / maximal amount of diffusion?
-
-	return map;
-    }
-
-    private float averageAround(final float[][] map, final int x, final int y) {
-	float total = 0;
-	int count = 0;
-	int x1, y1;
-
-	for (int ox = -1; ox <= 1; ox++) {
-	    for (int oy = -1; oy <= 1; oy++) {
-		x1 = x + ox;
-		y1 = y + oy;
-		if (x1 == x || y1 == y) {
-		    if (isWithinBounds(map, x1, y1)) {
-			count++;
-			total += map[x1][y1];
-		    }
-		}
-	    }
-	}
-	return (total / 8);
-    }
-
-    private boolean isWithinBounds(final float[][] map, final int x, final int y) {
-	final int colMax = map[0].length;
-	final int rowMax = map.length;
-
-	boolean xWithin = false;
-	boolean yWithin = false;
-
-	if (x >= 0 && x < colMax) {
-	    xWithin = true;
-	}
-
-	if (y >= 0 && y < rowMax) {
-	    yWithin = true;
-	}
-
-	return xWithin && yWithin;
-    }
-    
     private String mapToString(final float[][] map) {
 	final int colMax = map[0].length;
 	final int rowMax = map.length;
