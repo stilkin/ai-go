@@ -1,6 +1,8 @@
 package stilkin;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 
@@ -10,6 +12,7 @@ import java.util.Random;
  *
  */
 public class GoBot implements InputParser.IActionRequestListener {
+    private HashSet<String> fieldHistory = new HashSet<String>();
     private GoParser goParser;
     private GoField goField;
     private int myId = 0;
@@ -31,7 +34,7 @@ public class GoBot implements InputParser.IActionRequestListener {
     @Override
     public void OnActionRequested(final String type, final long time) {
 	roundStart = System.currentTimeMillis();
-	System.err.println("OnActionRequested Round" + goParser.getUpdate(GoConsts.Updates.ROUND_NR));
+	System.err.println("OnActionRequested round " + goParser.getUpdate(GoConsts.Updates.ROUND_NR));
 
 	if (goField == null) { // lazy loader
 	    goField = new GoField();
@@ -48,16 +51,71 @@ public class GoBot implements InputParser.IActionRequestListener {
 
 	final String fieldStr = goParser.getUpdate(GoConsts.Updates.GAME_FIELD);
 	goField.parseFromString(fieldStr);
+	fieldHistory.add(goField.toString()); // for Ko rule
 	System.err.println(goField.toPrettyString());
 
-	// TODO: implement KO rule
-	// get a list of all empty fields with liberties (= valid moves)
-	final List<GoCoord> validMoves = new ArrayList<GoCoord>();
-	validMoves.addAll(goField.getCoordsWithLiberties(0, 4));
-	validMoves.addAll(goField.getCoordsWithLiberties(0, 3));
-	validMoves.addAll(goField.getCoordsWithLiberties(0, 2));
-	validMoves.addAll(goField.getCoordsWithLiberties(0, 1));
-	// System.err.println("validMoves: " + validMoves.size());
+	// the strings I currently own
+	final List<HashSet<GoCoord>> myStrings = goField.getStringSetOfType(myId);
+
+	// calculate liberties for all my positions
+	final HashMap<GoCoord, Integer> myLiberties = new HashMap<GoCoord, Integer>();
+	for (HashSet<GoCoord> stringSet : myStrings) {
+	    final List<GoCoord> liberties = goField.getLibertiesOfString(stringSet);
+	    final int libertyCount = liberties.size();
+	    for (GoCoord coord : stringSet) {
+		myLiberties.put(coord, libertyCount);
+	    }
+	}
+
+	final List<GoCoord> emptyPositions = goField.getCoordsWithValue(0);
+	System.err.println("emptyPositions " + emptyPositions.size());
+
+	// calculate all empty positions with direct and indirect liberties
+	final List<GoCoord> posWithLiberties = new ArrayList<GoCoord>();
+	for (GoCoord pos : emptyPositions) {
+	    final List<GoCoord> emptyNeighbours = goField.getAdjacendCoords(pos.x, pos.y, 0);
+	    if (!emptyNeighbours.isEmpty()) {
+		posWithLiberties.add(pos);
+	    } else {
+		final List<GoCoord> neighbours = goField.getAdjacendCoords(pos.x, pos.y, myId);
+		for (GoCoord nb : neighbours) {
+		    final Integer libs = myLiberties.get(nb);
+		    if (libs != null && libs > 1) { // has to be > 1 to take empty cell itself into account
+			posWithLiberties.add(pos);
+			break;
+		    }
+		}
+	    }
+	}
+	System.err.println("posWithLiberties " + posWithLiberties.size());
+	
+	// TODO: calculate enemy strings and check if we can remove them -> no extra liberties required for those positions
+	// TODO: prevent filling up of own eyes
+
+	// implementation of KO rule
+	final GoField tmpField = new GoField();
+	tmpField.changeSize(GoField.MAX_WIDTH, GoField.MAX_HEIGHT);
+	tmpField.parseFromString(fieldStr);
+	GoCoord tmpCoord;
+	for (int pl = 0; pl < posWithLiberties.size(); pl++) {
+	    tmpCoord = posWithLiberties.get(pl);
+	    tmpField.setCell(tmpCoord.x, tmpCoord.y, myId); // pretend we play this move
+	    if (fieldHistory.contains(tmpField.toString())) { // position has been played already
+		posWithLiberties.remove(pl);
+		pl--;
+		System.err.println("Move " + tmpCoord + " removed to prevent Ko problems.");
+	    }
+	    tmpField.setCell(tmpCoord.x, tmpCoord.y, 0); // reset
+	}
+
+	// the strings my enemy owns
+	// final List<HashSet<GoCoord>> enemyStrings = goField.getStringSetOfType(enemyId);
+	//
+	// System.err.println(enemyStrings.size() + " sets");
+	// for (HashSet<GoCoord> stringSet : enemyStrings) {
+	// final List<GoCoord> liberties = goField.getLibertiesOfString(stringSet);
+	// System.err.println(stringSet.toString() + " " + liberties.size());
+	// }
 
 	List<GoCoord> enemyStones, nearbyMoves;
 	for (int l = 1; l <= 4; l++) {
@@ -69,7 +127,7 @@ public class GoBot implements InputParser.IActionRequestListener {
 		nearbyMoves = goField.getAdjacendCoords(eStone.x, eStone.y, 0);
 		for (GoCoord move : nearbyMoves) {
 		    // check move for validity
-		    if (validMoves.contains(move)) {
+		    if (posWithLiberties.contains(move)) {
 			printMove(move); // make a move
 			return; // stop here
 		    }
@@ -79,9 +137,9 @@ public class GoBot implements InputParser.IActionRequestListener {
 
 	// if we arrive here, there were no enemy stones (with liberties) we could move on
 	GoCoord move = null;
-	if (validMoves.size() > 0) {
+	if (posWithLiberties.size() > 0) {
 	    final Random rnd = new Random();
-	    move = validMoves.get(rnd.nextInt(validMoves.size()));
+	    move = posWithLiberties.get(rnd.nextInt(posWithLiberties.size()));
 	}
 	printMove(move);
     }
@@ -99,33 +157,7 @@ public class GoBot implements InputParser.IActionRequestListener {
     private void printMove(final int x, final int y) {
 	System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, x, y);
 	System.out.flush();
-    }
-
-    private String mapToString(final float[][] map) {
-	final int colMax = map[0].length;
-	final int rowMax = map.length;
-	float max = 0;
-	for (int x = 0; x < colMax; x++) {
-	    for (int y = 0; y < rowMax; y++) {
-		if (map[x][y] > max) {
-		    max = map[x][y];
-		}
-	    }
-	}
-
-	final StringBuilder strB = new StringBuilder();
-	for (int x = 0; x < colMax; x++) {
-	    for (int y = 0; y < rowMax; y++) {
-		final float pct = map[x][y] / max;
-		if (pct != 0) {
-		    strB.append(String.format("%02d ", (int) (99 * pct))); // scale to 100
-		} else {
-		    strB.append("   ");
-		}
-	    }
-	    strB.append(" | \n");
-	}
-	return strB.toString();
+	System.err.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, x, y); // debug
     }
 
 }

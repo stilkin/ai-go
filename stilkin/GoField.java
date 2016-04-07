@@ -1,6 +1,8 @@
 package stilkin;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -47,13 +49,17 @@ public class GoField {
 	for (int y = 0; y < MAX_HEIGHT; y++) {
 	    for (int x = 0; x < MAX_WIDTH; x++) {
 		if (cells[x][y] == value) {
-		    if (getLibertiesForCoord(x, y) == liberties) {
+		    if (getFreeNeighbours(x, y) == liberties) {
 			coordList.add(new GoCoord(x, y));
 		    }
 		}
 	    }
 	}
 	return coordList;
+    }
+    
+    public void setCell(final int x, final int y, final int value){
+	cells[x][y] = value;
     }
 
     /**
@@ -63,18 +69,27 @@ public class GoField {
      * @return
      */
     public List<GoCoord> getCoordsWithValue(final int value) {
-	return getCoordsWithLiberties(value, 0);
+	final ArrayList<GoCoord> coordList = new ArrayList<GoCoord>();
+
+	for (int y = 0; y < MAX_HEIGHT; y++) {
+	    for (int x = 0; x < MAX_WIDTH; x++) {
+		if (cells[x][y] == value) {
+		    coordList.add(new GoCoord(x, y));
+		}
+	    }
+	}
+	return coordList;
     }
 
     public void updateLiberties() {
 	for (int y = 0; y < MAX_HEIGHT; y++) {
 	    for (int x = 0; x < MAX_WIDTH; x++) {
-		liberties[x][y] = countLibertiesForCoord(x, y);
+		liberties[x][y] = countFreeNeighbours(x, y);
 	    }
 	}
     }
 
-    public int getLibertiesForCoord(final int x, final int y) {
+    public int getFreeNeighbours(final int x, final int y) {
 	if (isWithinBounds(x, y)) {
 	    return liberties[x][y];
 	} else {
@@ -82,7 +97,7 @@ public class GoField {
 	}
     }
 
-    public int countLibertiesForCoord(final int x, final int y) {
+    public int countFreeNeighbours(final int x, final int y) {
 	int liberties = 0;
 	int x1, y1;
 	x1 = x - 1;
@@ -118,7 +133,7 @@ public class GoField {
     }
 
     public List<GoCoord> getAdjacendCoords(final int x, final int y, final int value) {
-	final ArrayList<GoCoord> coordList = new ArrayList<GoCoord>();
+	final List<GoCoord> coordList = new ArrayList<GoCoord>();
 	int x1, y1;
 	x1 = x - 1;
 	y1 = y;
@@ -149,6 +164,55 @@ public class GoField {
 	    }
 	}
 	return coordList;
+    }
+
+    public List<HashSet<GoCoord>> getStringSetOfType(final int value) {
+	final List<HashSet<GoCoord>> stringSet = new ArrayList<HashSet<GoCoord>>();
+	final List<GoCoord> enemyPieces = getCoordsWithValue(value);
+	final List<GoCoord> usedPieces = new ArrayList<GoCoord>();
+
+	GoCoord ePiece;
+	while (!enemyPieces.isEmpty()) {
+	    // get a piece
+	    ePiece = enemyPieces.get(0);
+	    enemyPieces.remove(ePiece);
+	    usedPieces.add(ePiece);
+
+	    // start a string
+	    final HashSet<GoCoord> string = new HashSet<GoCoord>();
+	    string.add(ePiece);
+
+	    addNeighBours(ePiece, value, string, enemyPieces, usedPieces);
+	    stringSet.add(string);
+	}
+
+	return stringSet;
+    }
+
+    private void addNeighBours(final GoCoord ePiece, final int value, final HashSet<GoCoord> string, final List<GoCoord> enemyPieces, final List<GoCoord> usedPieces) {
+	// get all neighbours of same color
+	final List<GoCoord> neighbours = getAdjacendCoords(ePiece.x, ePiece.y, value);
+	for (GoCoord nb : neighbours) {
+	    // add to string
+	    if (enemyPieces.contains(nb)) {
+		string.add(nb);
+		enemyPieces.remove(nb);
+		usedPieces.add(nb);
+		// recurse for the neighbours
+		addNeighBours(nb, value, string, enemyPieces, usedPieces);
+	    }
+
+	}
+    }
+    
+    public List<GoCoord> getLibertiesOfString(final Collection<GoCoord> stringSet){
+	final List<GoCoord> liberties = new ArrayList<GoCoord>();
+	
+	for(GoCoord piece: stringSet) {
+	    liberties.addAll(getAdjacendCoords(piece.x,piece.y, 0));
+	}
+	
+	return liberties;
     }
 
     private boolean isWithinBounds(final int x, final int y) {
@@ -218,12 +282,22 @@ public class GoField {
     }
 
     public String toPrettyString() {
-	String s = " ";
+	String s = "   >";
+	
+	for (int x = 0; x < MAX_WIDTH; x++) {
+	    if (x < 10 || x % 2 != 0){
+		s += String.format("%2d", x);
+	    } else {
+		s += "  ";
+	    }
+	}
+	s += "\n";
 	for (int y = 0; y < MAX_HEIGHT; y++) {
+	    s += String.format("%2d|  ", y);
 	    for (int x = 0; x < MAX_WIDTH; x++) {
 		s += cells[x][y] + " ";
 	    }
-	    s += "\n ";
+	    s += "\n";
 	}
 	return s;
     }
