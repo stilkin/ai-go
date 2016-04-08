@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * 
@@ -60,7 +61,7 @@ public class GoBot implements InputParser.IActionRequestListener {
 	// calculate liberties for all my positions
 	final HashMap<GoCoord, Integer> myLiberties = new HashMap<GoCoord, Integer>();
 	for (HashSet<GoCoord> stringSet : myStrings) {
-	    final List<GoCoord> liberties = goField.getLibertiesOfString(stringSet);
+	    final Set<GoCoord> liberties = goField.getLibertiesOfString(stringSet);
 	    final int libertyCount = liberties.size();
 	    for (GoCoord coord : stringSet) {
 		myLiberties.put(coord, libertyCount);

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 
@@ -205,8 +206,8 @@ public class GoField {
 	}
     }
     
-    public List<GoCoord> getLibertiesOfString(final Collection<GoCoord> stringSet){
-	final List<GoCoord> liberties = new ArrayList<GoCoord>();
+    public Set<GoCoord> getLibertiesOfString(final Collection<GoCoord> stringSet){
+	final Set<GoCoord> liberties = new HashSet<GoCoord>(); // use a set to prevent doubles
 	
 	for(GoCoord piece: stringSet) {
 	    liberties.addAll(getAdjacendCoords(piece.x,piece.y, 0));
