@@ -50,7 +50,7 @@ public class GoField {
 	for (int y = 0; y < MAX_HEIGHT; y++) {
 	    for (int x = 0; x < MAX_WIDTH; x++) {
 		if (cells[x][y] == value) {
-		    if (getFreeNeighbours(x, y) == liberties) {
+		    if (getFreeNeighbourCount(x, y) == liberties) {
 			coordList.add(new GoCoord(x, y));
 		    }
 		}
@@ -58,9 +58,13 @@ public class GoField {
 	}
 	return coordList;
     }
-    
-    public void setCell(final int x, final int y, final int value){
+
+    public void setCell(final int x, final int y, final int value) {
 	cells[x][y] = value;
+    }
+    
+    public int getCell(final int x, final int y){
+	return cells[x][y];
     }
 
     /**
@@ -90,7 +94,7 @@ public class GoField {
 	}
     }
 
-    public int getFreeNeighbours(final int x, final int y) {
+    public int getFreeNeighbourCount(final int x, final int y) {
 	if (isWithinBounds(x, y)) {
 	    return liberties[x][y];
 	} else {
@@ -99,68 +103,72 @@ public class GoField {
     }
 
     public int countFreeNeighbours(final int x, final int y) {
-	int liberties = 0;
-	int x1, y1;
-	x1 = x - 1;
-	y1 = y;
-	if (isWithinBounds(x1, y1)) {
-	    if (isEmptyCell(x1, y1)) {
-		liberties++;
-	    }
-	}
-	x1 = x + 1;
-	y1 = y;
-	if (isWithinBounds(x1, y1)) {
-	    if (isEmptyCell(x1, y1)) {
-		liberties++;
-	    }
-	}
-	x1 = x;
-	y1 = y - 1;
-	if (isWithinBounds(x1, y1)) {
-	    if (isEmptyCell(x1, y1)) {
-		liberties++;
-	    }
-	}
-	x1 = x;
-	y1 = y + 1;
-	if (isWithinBounds(x1, y1)) {
-	    if (isEmptyCell(x1, y1)) {
-		liberties++;
-	    }
-	}
-
-	return liberties;
+	final List<GoCoord> coordList = getFreeNeighbours(x, y);
+	return coordList.size();
     }
 
-    public List<GoCoord> getAdjacendCoords(final int x, final int y, final int value) {
+    public List<GoCoord> getFreeNeighbours(final int x, final int y) {
 	final List<GoCoord> coordList = new ArrayList<GoCoord>();
 	int x1, y1;
 	x1 = x - 1;
 	y1 = y;
 	if (isWithinBounds(x1, y1)) {
-	    if (cells[x1][y1] == value) {
+	    if (isEmptyCell(x1, y1)) {
 		coordList.add(new GoCoord(x1, y1));
 	    }
 	}
 	x1 = x + 1;
 	y1 = y;
 	if (isWithinBounds(x1, y1)) {
-	    if (cells[x1][y1] == value) {
+	    if (isEmptyCell(x1, y1)) {
 		coordList.add(new GoCoord(x1, y1));
 	    }
 	}
 	x1 = x;
 	y1 = y - 1;
 	if (isWithinBounds(x1, y1)) {
-	    if (cells[x1][y1] == value) {
+	    if (isEmptyCell(x1, y1)) {
 		coordList.add(new GoCoord(x1, y1));
 	    }
 	}
 	x1 = x;
 	y1 = y + 1;
 	if (isWithinBounds(x1, y1)) {
-	    if (cells[x1][y1] == value) {
+	    if (isEmptyCell(x1, y1)) {
+		coordList.add(new GoCoord(x1, y1));
+	    }
+	}
+	return coordList;
+    }
+
+    public List<GoCoord> getNeighboursWithValue(final int x, final int y, final int playerId) {
+	final List<GoCoord> coordList = new ArrayList<GoCoord>();
+	int x1, y1;
+	x1 = x - 1;
+	y1 = y;
+	if (isWithinBounds(x1, y1)) {
+	    if (cells[x1][y1] == playerId) {
+		coordList.add(new GoCoord(x1, y1));
+	    }
+	}
+	x1 = x + 1;
+	y1 = y;
+	if (isWithinBounds(x1, y1)) {
+	    if (cells[x1][y1] == playerId) {
+		coordList.add(new GoCoord(x1, y1));
+	    }
+	}
+	x1 = x;
+	y1 = y - 1;
+	if (isWithinBounds(x1, y1)) {
+	    if (cells[x1][y1] == playerId) {
+		coordList.add(new GoCoord(x1, y1));
+	    }
+	}
+	x1 = x;
+	y1 = y + 1;
+	if (isWithinBounds(x1, y1)) {
+	    if (cells[x1][y1] == playerId) {
 		coordList.add(new GoCoord(x1, y1));
 	    }
 	}
@@ -190,9 +198,9 @@ public class GoField {
 	return stringSet;
     }
 
-    private void addNeighBours(final GoCoord ePiece, final int value, final HashSet<GoCoord> string, final List<GoCoord> enemyPieces, final List<GoCoord> usedPieces) {
+    private void addNeighBours(final GoCoord ePiece, final int playerId, final HashSet<GoCoord> string, final List<GoCoord> enemyPieces, final List<GoCoord> usedPieces) {
 	// get all neighbours of same color
-	final List<GoCoord> neighbours = getAdjacendCoords(ePiece.x, ePiece.y, value);
+	final List<GoCoord> neighbours = getNeighboursWithValue(ePiece.x, ePiece.y, playerId);
 	for (GoCoord nb : neighbours) {
 	    // add to string
 	    if (enemyPieces.contains(nb)) {
@@ -200,19 +208,19 @@ public class GoField {
 		enemyPieces.remove(nb);
 		usedPieces.add(nb);
 		// recurse for the neighbours
-		addNeighBours(nb, value, string, enemyPieces, usedPieces);
+		addNeighBours(nb, playerId, string, enemyPieces, usedPieces);
 	    }
 
 	}
     }
-    
-    public Set<GoCoord> getLibertiesOfString(final Collection<GoCoord> stringSet){
+
+    public Set<GoCoord> getLibertiesOfString(final Collection<GoCoord> stringSet) {
 	final Set<GoCoord> liberties = new HashSet<GoCoord>(); // use a set to prevent doubles
-	
-	for(GoCoord piece: stringSet) {
-	    liberties.addAll(getAdjacendCoords(piece.x,piece.y, 0));
+
+	for (GoCoord piece : stringSet) {
+	    liberties.addAll(getFreeNeighbours(piece.x, piece.y));
 	}
-	
+
 	return liberties;
     }
 
@@ -236,7 +244,7 @@ public class GoField {
     }
 
     public boolean isEmptyCell(final int x, final int y) {
-	return (cells[x][y] == 0);
+	return (cells[x][y] <= 0);
     }
 
     /**
@@ -284,9 +292,9 @@ public class GoField {
 
     public String toPrettyString() {
 	String s = "   >";
-	
+
 	for (int x = 0; x < MAX_WIDTH; x++) {
-	    if (x < 10 || x % 2 != 0){
+	    if (x < 10 || x % 2 != 0) {
 		s += String.format("%2d", x);
 	    } else {
 		s += "  ";

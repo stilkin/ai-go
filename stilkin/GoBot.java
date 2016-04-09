@@ -46,18 +46,53 @@ public class GoBot implements InputParser.IActionRequestListener {
 
 	if (myId == 0) {
 	    myId = goParser.getSettingAsInt(GoConsts.Settings.YOUR_BOTID);
-	    enemyId = 3 - myId; // TOOD: check
+	    enemyId = 3 - myId;
 	    System.err.println("I am player " + myId);
 	}
 
 	final String fieldStr = goParser.getUpdate(GoConsts.Updates.GAME_FIELD);
 	goField.parseFromString(fieldStr);
-	fieldHistory.add(goField.toString()); // for Ko rule
-	System.err.println(goField.toPrettyString());
+	System.err.println(goField.toPrettyString());	
+	fieldHistory.add(goField.toString()); // field history for Ko rule
 
-	// the strings I currently own
-	final List<HashSet<GoCoord>> myStrings = goField.getStringSetOfType(myId);
+	// messy field, for editing
+	final GoField tmpField = new GoField();
+	tmpField.changeSize(GoField.MAX_WIDTH, GoField.MAX_HEIGHT);
+	tmpField.parseFromString(fieldStr);
 
+	// STRATEGY: try to find enemy strings that can be removed
+	final List<HashSet<GoCoord>> enemyStrings = goField.getStringSetOfType(enemyId);
+	// calculate liberties for enemy strings
+	for (HashSet<GoCoord> stringSet : enemyStrings) {
+	    final Set<GoCoord> liberties = goField.getLibertiesOfString(stringSet);
+	    final int libertyCount = liberties.size();
+	    if(libertyCount == 1) { // enemy string can be removed
+		for(GoCoord move : liberties) {
+		    if (!hasBoardBeenPlayed(tmpField, move)) {
+			printMove(move); // make a move
+			System.err.println("Liberty " + liberties.toString() + " of enemy string " + stringSet.toString());
+			return; // stop here
+		    }
+		}
+	    }
+	}	
+
+	// get all empty positions, these are potential moves
+	final List<GoCoord> potentialMoves = goField.getCoordsWithValue(0);
+	System.err.println("emptyPositions " + potentialMoves.size());
+
+	// FILTER: remove own 'eyes', they are not useful as a move
+	GoCoord pos;
+	for (int ep = 0; ep < potentialMoves.size(); ep++) {
+	    pos = potentialMoves.get(ep);
+	    final List<GoCoord> neighbours = goField.getNeighboursWithValue(pos.x, pos.y, myId);
+	    if (neighbours.size() >= 4) {
+		potentialMoves.remove(ep);
+	    }
+	}
+
+	// FILTER: calculate all empty positions with direct and indirect liberties, these are the only valid moves
+	final List<HashSet<GoCoord>> myStrings = goField.getStringSetOfType(myId); // the strings I currently own
 	// calculate liberties for all my positions
 	final HashMap<GoCoord, Integer> myLiberties = new HashMap<GoCoord, Integer>();
 	for (HashSet<GoCoord> stringSet : myStrings) {
@@ -68,56 +103,38 @@ public class GoBot implements InputParser.IActionRequestListener {
 	    }
 	}
 
-	final List<GoCoord> emptyPositions = goField.getCoordsWithValue(0);
-	System.err.println("emptyPositions " + emptyPositions.size());
-
-	// calculate all empty positions with direct and indirect liberties
+	
 	final List<GoCoord> posWithLiberties = new ArrayList<GoCoord>();
-	for (GoCoord pos : emptyPositions) {
-	    final List<GoCoord> emptyNeighbours = goField.getAdjacendCoords(pos.x, pos.y, 0);
-	    if (!emptyNeighbours.isEmpty()) {
-		posWithLiberties.add(pos);
+	for (GoCoord pom : potentialMoves) {
+	    final List<GoCoord> emptyNeighbours = goField.getFreeNeighbours(pom.x, pom.y);
+	    if (!emptyNeighbours.isEmpty()) { // direct empty neighbour -> valid move
+		posWithLiberties.add(pom);
 	    } else {
-		final List<GoCoord> neighbours = goField.getAdjacendCoords(pos.x, pos.y, myId);
+		final List<GoCoord> neighbours = goField.getNeighboursWithValue(pom.x, pom.y, myId);
 		for (GoCoord nb : neighbours) {
 		    final Integer libs = myLiberties.get(nb);
 		    if (libs != null && libs > 1) { // has to be > 1 to take empty cell itself into account
-			posWithLiberties.add(pos);
+			posWithLiberties.add(pom); // indirect empty neighbour -> valid move
 			break;
 		    }
 		}
 	    }
 	}
 	System.err.println("posWithLiberties " + posWithLiberties.size());
-	
-	// TODO: calculate enemy strings and check if we can remove them -> no extra liberties required for those positions
-	// TODO: prevent filling up of own eyes
 
-	// implementation of KO rule
-	final GoField tmpField = new GoField();
-	tmpField.changeSize(GoField.MAX_WIDTH, GoField.MAX_HEIGHT);
-	tmpField.parseFromString(fieldStr);
+
+	// FILTER: implementation of KO rule -> remove all moves that result in previous board positions
 	GoCoord tmpCoord;
 	for (int pl = 0; pl < posWithLiberties.size(); pl++) {
 	    tmpCoord = posWithLiberties.get(pl);
-	    tmpField.setCell(tmpCoord.x, tmpCoord.y, myId); // pretend we play this move
-	    if (fieldHistory.contains(tmpField.toString())) { // position has been played already
+	    if(hasBoardBeenPlayed(tmpField, tmpCoord)) {
 		posWithLiberties.remove(pl);
 		pl--;
 		System.err.println("Move " + tmpCoord + " removed to prevent Ko problems.");
 	    }
-	    tmpField.setCell(tmpCoord.x, tmpCoord.y, 0); // reset
 	}
-
-	// the strings my enemy owns
-	// final List<HashSet<GoCoord>> enemyStrings = goField.getStringSetOfType(enemyId);
-	//
-	// System.err.println(enemyStrings.size() + " sets");
-	// for (HashSet<GoCoord> stringSet : enemyStrings) {
-	// final List<GoCoord> liberties = goField.getLibertiesOfString(stringSet);
-	// System.err.println(stringSet.toString() + " " + liberties.size());
-	// }
-
+	
+	// STRATEGY: reduce enemy liberties in a greedy fashion
 	List<GoCoord> enemyStones, nearbyMoves;
 	for (int l = 1; l <= 4; l++) {
 	    // get a list of enemy stones with limited liberties
@@ -125,7 +142,7 @@ public class GoBot implements InputParser.IActionRequestListener {
 	    // System.err.println("Found " + enemyStones.size() + " enemy stones with " + l + " liberties");
 	    for (GoCoord eStone : enemyStones) {
 		// get the empty fields around it
-		nearbyMoves = goField.getAdjacendCoords(eStone.x, eStone.y, 0);
+		nearbyMoves = goField.getFreeNeighbours(eStone.x, eStone.y);
 		for (GoCoord move : nearbyMoves) {
 		    // check move for validity
 		    if (posWithLiberties.contains(move)) {
@@ -143,6 +160,18 @@ public class GoBot implements InputParser.IActionRequestListener {
 	    move = posWithLiberties.get(rnd.nextInt(posWithLiberties.size()));
 	}
 	printMove(move);
+    }
+    
+    private boolean hasBoardBeenPlayed(final GoField goField, final GoCoord move){
+	if (goField.getCell(move.x, move.y) < 0) { 
+	    System.err.println(move + " value < 0");
+	    return true; // TODO: fix this -1 stuff  
+	}
+	
+	goField.setCell(move.x, move.y, myId); // pretend we play this move
+	final boolean hasBeenPlayed = fieldHistory.contains(goField.toString()); // position has been played already
+	goField.setCell(move.x, move.y, 0); // reset field
+	return hasBeenPlayed;	    
     }
 
     private void printMove(final GoCoord move) {
