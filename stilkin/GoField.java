@@ -12,6 +12,7 @@ import java.util.Set;
  *
  */
 public class GoField {
+    public static final int KO_VIOLATION = -1;
     public static int MAX_WIDTH = 19;
     public static int MAX_HEIGHT = 19;
     private int[][] cells = new int[MAX_WIDTH][MAX_HEIGHT];
@@ -245,6 +246,10 @@ public class GoField {
 
     public boolean isEmptyCell(final int x, final int y) {
 	return (cells[x][y] <= 0);
+    }
+    
+    public boolean doesMoveViolateKo(final int x, final int y) {
+	return (cells[x][y] == KO_VIOLATION);
     }
 
     /**

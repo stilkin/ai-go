@@ -13,7 +13,6 @@ import java.util.Set;
  *
  */
 public class GoBot implements InputParser.IActionRequestListener {
-    private HashSet<String> fieldHistory = new HashSet<String>();
     private GoParser goParser;
     private GoField goField;
     private int myId = 0;
@@ -52,13 +51,7 @@ public class GoBot implements InputParser.IActionRequestListener {
 
 	final String fieldStr = goParser.getUpdate(GoConsts.Updates.GAME_FIELD);
 	goField.parseFromString(fieldStr);
-	System.err.println(goField.toPrettyString());	
-	fieldHistory.add(goField.toString()); // field history for Ko rule
-
-	// messy field, for editing
-	final GoField tmpField = new GoField();
-	tmpField.changeSize(GoField.MAX_WIDTH, GoField.MAX_HEIGHT);
-	tmpField.parseFromString(fieldStr);
+	System.err.println(goField.toPrettyString());
 
 	// STRATEGY: try to find enemy strings that can be removed
 	final List<HashSet<GoCoord>> enemyStrings = goField.getStringSetOfType(enemyId);
@@ -66,16 +59,16 @@ public class GoBot implements InputParser.IActionRequestListener {
 	for (HashSet<GoCoord> stringSet : enemyStrings) {
 	    final Set<GoCoord> liberties = goField.getLibertiesOfString(stringSet);
 	    final int libertyCount = liberties.size();
-	    if(libertyCount == 1) { // enemy string can be removed
-		for(GoCoord move : liberties) {
-		    if (!hasBoardBeenPlayed(tmpField, move)) {
+	    if (libertyCount == 1) { // enemy string can be removed
+		for (GoCoord move : liberties) {
+		    if (!goField.doesMoveViolateKo(move.x, move.y)) {
 			printMove(move); // make a move
 			System.err.println("Liberty " + liberties.toString() + " of enemy string " + stringSet.toString());
 			return; // stop here
 		    }
 		}
 	    }
-	}	
+	}
 
 	// get all empty positions, these are potential moves
 	final List<GoCoord> potentialMoves = goField.getCoordsWithValue(0);
@@ -103,7 +96,6 @@ public class GoBot implements InputParser.IActionRequestListener {
 	    }
 	}
 
-	
 	final List<GoCoord> posWithLiberties = new ArrayList<GoCoord>();
 	for (GoCoord pom : potentialMoves) {
 	    final List<GoCoord> emptyNeighbours = goField.getFreeNeighbours(pom.x, pom.y);
@@ -122,18 +114,17 @@ public class GoBot implements InputParser.IActionRequestListener {
 	}
 	System.err.println("posWithLiberties " + posWithLiberties.size());
 
-
 	// FILTER: implementation of KO rule -> remove all moves that result in previous board positions
 	GoCoord tmpCoord;
 	for (int pl = 0; pl < posWithLiberties.size(); pl++) {
 	    tmpCoord = posWithLiberties.get(pl);
-	    if(hasBoardBeenPlayed(tmpField, tmpCoord)) {
+	    if (goField.doesMoveViolateKo(tmpCoord.x, tmpCoord.y)) {
 		posWithLiberties.remove(pl);
 		pl--;
 		System.err.println("Move " + tmpCoord + " removed to prevent Ko problems.");
 	    }
 	}
-	
+
 	// STRATEGY: reduce enemy liberties in a greedy fashion
 	List<GoCoord> enemyStones, nearbyMoves;
 	for (int l = 1; l <= 4; l++) {
@@ -152,7 +143,8 @@ public class GoBot implements InputParser.IActionRequestListener {
 		}
 	    }
 	}
-
+	// TODO: get enemy strings, sort by size, pick big strings with low liberties
+	
 	// if we arrive here, there were no enemy stones (with liberties) we could move on
 	GoCoord move = null;
 	if (posWithLiberties.size() > 0) {
@@ -161,18 +153,7 @@ public class GoBot implements InputParser.IActionRequestListener {
 	}
 	printMove(move);
     }
-    
-    private boolean hasBoardBeenPlayed(final GoField goField, final GoCoord move){
-	if (goField.getCell(move.x, move.y) < 0) { 
-	    System.err.println(move + " value < 0");
-	    return true; // TODO: fix this -1 stuff  
-	}
-	
-	goField.setCell(move.x, move.y, myId); // pretend we play this move
-	final boolean hasBeenPlayed = fieldHistory.contains(goField.toString()); // position has been played already
-	goField.setCell(move.x, move.y, 0); // reset field
-	return hasBeenPlayed;	    
-    }
+
 
     private void printMove(final GoCoord move) {
 	if (move != null) {
