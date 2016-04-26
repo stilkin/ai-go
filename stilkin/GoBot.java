@@ -1,8 +1,9 @@
 package stilkin;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -53,20 +54,25 @@ public class GoBot implements InputParser.IActionRequestListener {
 	goField.parseFromString(fieldStr);
 	System.err.println(goField.toPrettyString());
 
-	// STRATEGY: try to find enemy strings that can be removed
-	final List<HashSet<GoCoord>> enemyStrings = goField.getStringSetOfType(enemyId);
-	// calculate liberties for enemy strings
-	for (HashSet<GoCoord> stringSet : enemyStrings) {
-	    final Set<GoCoord> liberties = goField.getLibertiesOfString(stringSet);
-	    final int libertyCount = liberties.size();
+	// STRATEGY: try to find enemy strings that can be removed in this turn
+	final List<GoString> enemyStrings = goField.getStringsOfType(enemyId);
+	GoString eString;
+	for (int es = 0; es < enemyStrings.size(); es++) {
+	    eString = enemyStrings.get(es);
+	    final Set<GoCoord> liberties = eString.getLiberties();
+	    final int libertyCount = eString.libertyCount();
 	    if (libertyCount == 1) { // enemy string can be removed
-		for (GoCoord move : liberties) {
+		for (final GoCoord move : liberties) {
 		    if (!goField.doesMoveViolateKo(move.x, move.y)) {
 			printMove(move); // make a move
-			System.err.println("Liberty " + liberties.toString() + " of enemy string " + stringSet.toString());
+			System.err.println("Liberty " + liberties.toString() + " of enemy string " + eString.toString());
 			return; // stop here
 		    }
 		}
+	    } else if (libertyCount == 0) { // this string cannot be attacked
+		// FILTER: remove enemy strings without liberties
+		enemyStrings.remove(es);
+		es--;
 	    }
 	}
 
@@ -75,6 +81,8 @@ public class GoBot implements InputParser.IActionRequestListener {
 	System.err.println("emptyPositions " + potentialMoves.size());
 
 	// FILTER: remove own 'eyes', they are not useful as a move
+	// TODO: what about 3 neighbours on a side?
+	// TODO: what about 3 of mine and one of enemy?
 	GoCoord pos;
 	for (int ep = 0; ep < potentialMoves.size(); ep++) {
 	    pos = potentialMoves.get(ep);
@@ -85,75 +93,70 @@ public class GoBot implements InputParser.IActionRequestListener {
 	}
 
 	// FILTER: calculate all empty positions with direct and indirect liberties, these are the only valid moves
-	final List<HashSet<GoCoord>> myStrings = goField.getStringSetOfType(myId); // the strings I currently own
+	final List<GoString> myStrings = goField.getStringsOfType(myId); // the strings I currently own
 	// calculate liberties for all my positions
 	final HashMap<GoCoord, Integer> myLiberties = new HashMap<GoCoord, Integer>();
-	for (HashSet<GoCoord> stringSet : myStrings) {
-	    final Set<GoCoord> liberties = goField.getLibertiesOfString(stringSet);
-	    final int libertyCount = liberties.size();
-	    for (GoCoord coord : stringSet) {
+	for (GoString stringSet : myStrings) {
+	    final int libertyCount = stringSet.libertyCount();
+	    for (GoCoord coord : stringSet.getCoords()) {
 		myLiberties.put(coord, libertyCount);
 	    }
 	}
 
-	final List<GoCoord> posWithLiberties = new ArrayList<GoCoord>();
+	final List<GoCoord> movesWithLiberties = new ArrayList<GoCoord>();
 	for (GoCoord pom : potentialMoves) {
 	    final List<GoCoord> emptyNeighbours = goField.getFreeNeighbours(pom.x, pom.y);
 	    if (!emptyNeighbours.isEmpty()) { // direct empty neighbour -> valid move
-		posWithLiberties.add(pom);
+		movesWithLiberties.add(pom);
 	    } else {
 		final List<GoCoord> neighbours = goField.getNeighboursWithValue(pom.x, pom.y, myId);
 		for (GoCoord nb : neighbours) {
 		    final Integer libs = myLiberties.get(nb);
 		    if (libs != null && libs > 1) { // has to be > 1 to take empty cell itself into account
-			posWithLiberties.add(pom); // indirect empty neighbour -> valid move
+			movesWithLiberties.add(pom); // indirect empty neighbour -> valid move
 			break;
 		    }
 		}
 	    }
 	}
-	System.err.println("posWithLiberties " + posWithLiberties.size());
+	System.err.println("posWithLiberties " + movesWithLiberties.size());
 
 	// FILTER: implementation of KO rule -> remove all moves that result in previous board positions
 	GoCoord tmpCoord;
-	for (int pl = 0; pl < posWithLiberties.size(); pl++) {
-	    tmpCoord = posWithLiberties.get(pl);
+	for (int pl = 0; pl < movesWithLiberties.size(); pl++) {
+	    tmpCoord = movesWithLiberties.get(pl);
 	    if (goField.doesMoveViolateKo(tmpCoord.x, tmpCoord.y)) {
-		posWithLiberties.remove(pl);
+		movesWithLiberties.remove(pl);
 		pl--;
 		System.err.println("Move " + tmpCoord + " removed to prevent Ko problems.");
 	    }
 	}
 
 	// STRATEGY: reduce enemy liberties in a greedy fashion
-	List<GoCoord> enemyStones, nearbyMoves;
-	for (int l = 1; l <= 4; l++) {
-	    // get a list of enemy stones with limited liberties
-	    enemyStones = goField.getCoordsWithLiberties(enemyId, l);
-	    // System.err.println("Found " + enemyStones.size() + " enemy stones with " + l + " liberties");
-	    for (GoCoord eStone : enemyStones) {
-		// get the empty fields around it
-		nearbyMoves = goField.getFreeNeighbours(eStone.x, eStone.y);
-		for (GoCoord move : nearbyMoves) {
+	if (enemyStrings.size() > 0) {
+	    // sort enemy strings by liberties and size
+	    Collections.sort(enemyStrings, new StringOrderer().reversed());
+
+	    for (final GoString enString : enemyStrings) {
+		for (final GoCoord move : enString.getLiberties()) {
 		    // check move for validity
-		    if (posWithLiberties.contains(move)) {
+		    if (movesWithLiberties.contains(move)) {
+			System.err.println("Going after: " + enString);
 			printMove(move); // make a move
 			return; // stop here
 		    }
 		}
 	    }
 	}
-	// TODO: get enemy strings, sort by size, pick big strings with low liberties
-	
+
 	// if we arrive here, there were no enemy stones (with liberties) we could move on
 	GoCoord move = null;
-	if (posWithLiberties.size() > 0) {
+	if (movesWithLiberties.size() > 0) {
 	    final Random rnd = new Random();
-	    move = posWithLiberties.get(rnd.nextInt(posWithLiberties.size()));
+	    move = movesWithLiberties.get(rnd.nextInt(movesWithLiberties.size()));
 	}
 	printMove(move);
     }
-
 
     private void printMove(final GoCoord move) {
 	if (move != null) {
@@ -169,6 +172,38 @@ public class GoBot implements InputParser.IActionRequestListener {
 	System.out.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, x, y);
 	System.out.flush();
 	System.err.printf("%s %d %d\n", GoConsts.Actions.MOVE_ACTION, x, y); // debug
+    }
+
+    private class StringOrderer implements Comparator<GoString> {
+	/**
+	 * Returns a negative integer, zero, or a positive integer as the first argument is less than, equal to, or greater than the second.
+	 */
+	@Override
+	public int compare(final GoString str1, final GoString str2) {
+	    // TODO: take 0 liberties into account?
+
+	    // first string is worth less if it has more liberties
+	    if (str1.libertyCount() > str2.libertyCount()) {
+		return -1;
+	    }
+	    // first string is better if it is has fewer liberties
+	    if (str1.libertyCount() < str2.libertyCount()) {
+		return 1;
+	    }
+	    // if we get here they have similar amount of liberties
+
+	    // first string is worth more if it has more stones
+	    if (str1.size() > str2.size()) {
+		return 1;
+	    }
+	    // first string is worth less if it has more stones
+	    if (str1.size() < str2.size()) {
+		return -1;
+	    }
+
+	    // no clear difference
+	    return 0;
+	}
     }
 
 }

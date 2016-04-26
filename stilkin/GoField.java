@@ -108,6 +108,10 @@ public class GoField {
 	return coordList.size();
     }
 
+    public List<GoCoord> getFreeNeighbours(final GoCoord goCoord) {
+	return getFreeNeighbours(goCoord.x, goCoord.y);
+    }
+    
     public List<GoCoord> getFreeNeighbours(final int x, final int y) {
 	final List<GoCoord> coordList = new ArrayList<GoCoord>();
 	int x1, y1;
@@ -175,31 +179,29 @@ public class GoField {
 	}
 	return coordList;
     }
-
-    public List<HashSet<GoCoord>> getStringSetOfType(final int value) {
-	final List<HashSet<GoCoord>> stringSet = new ArrayList<HashSet<GoCoord>>();
-	final List<GoCoord> enemyPieces = getCoordsWithValue(value);
-	final List<GoCoord> usedPieces = new ArrayList<GoCoord>();
+    
+    public List<GoString> getStringsOfType(final int value) {
+	final List<GoString> stringList = new ArrayList<GoString>();
+	final List<GoCoord> allPieces = getCoordsWithValue(value);
 
 	GoCoord ePiece;
-	while (!enemyPieces.isEmpty()) {
+	while (!allPieces.isEmpty()) {
 	    // get a piece
-	    ePiece = enemyPieces.get(0);
-	    enemyPieces.remove(ePiece);
-	    usedPieces.add(ePiece);
+	    ePiece = allPieces.get(0);
+	    allPieces.remove(ePiece);
 
 	    // start a string
-	    final HashSet<GoCoord> string = new HashSet<GoCoord>();
+	    final GoString string = new GoString(this);
 	    string.add(ePiece);
 
-	    addNeighBours(ePiece, value, string, enemyPieces, usedPieces);
-	    stringSet.add(string);
+	    addNeighBours(ePiece, value, string, allPieces);
+	    stringList.add(string);
 	}
 
-	return stringSet;
+	return stringList;
     }
-
-    private void addNeighBours(final GoCoord ePiece, final int playerId, final HashSet<GoCoord> string, final List<GoCoord> enemyPieces, final List<GoCoord> usedPieces) {
+    
+    private void addNeighBours(final GoCoord ePiece, final int playerId, final GoString string, final List<GoCoord> enemyPieces) {
 	// get all neighbours of same color
 	final List<GoCoord> neighbours = getNeighboursWithValue(ePiece.x, ePiece.y, playerId);
 	for (GoCoord nb : neighbours) {
@@ -207,9 +209,8 @@ public class GoField {
 	    if (enemyPieces.contains(nb)) {
 		string.add(nb);
 		enemyPieces.remove(nb);
-		usedPieces.add(nb);
 		// recurse for the neighbours
-		addNeighBours(nb, playerId, string, enemyPieces, usedPieces);
+		addNeighBours(nb, playerId, string, enemyPieces);
 	    }
 
 	}
